@@ -54,9 +54,21 @@ except Exception as e:
 
 # COMMAND ----------
 
+import PermissionDeniedException,PermissionDeniedException
+
 adls_path = "dbfs:/mnt/landing_zone/customer.csv"
-cust_df = spark.read.format("csv").option("header", "true").load(adls_path)
-display(cust_df)
+try:
+    cust_df = spark.read.format("csv").option("header", "true").load(adls_path)
+    display(cust_df)
+except PermissionError as e:
+    print(f"Permission error: {str(e)}")
+    raise PermissionError("Failed to Read to ADLS. Check if you have write permissions.")
+except Exception as e:
+    print(f"Error writing to ADLS: {str(e)}")
+    raise IOError("Failed to write")
+except PermissionDeniedException as e:
+    print(f"PermissionDeniedException error: {str(e)}")
+
 
 
 # COMMAND ----------
@@ -273,4 +285,4 @@ display(final_scd2_df)
 
 # Write final SCD2 data back to Delta Table (or a new location)
 scd2_delta_path = "abfss://bayerstorage@bayershackadls.dfs.core.windows.net/delta/customer_scd2"
-final_scd2_df.write.format("delta").mode("overwrite").save(scd2_delta_path)
+final_scd2_df.write.format("csv").mode("overwrite").save(scd2_delta_path)
