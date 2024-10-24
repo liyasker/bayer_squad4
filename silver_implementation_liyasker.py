@@ -1,5 +1,10 @@
 # Databricks notebook source
 # MAGIC %md
+# MAGIC ### For Copying the file from raw to squad_4/bronze refer the ADF Pipeline namely "squad4_copy_bronze_liyasker" and for initial validation check the ADF pipeline namely "squad4_file_validation_liyasker"
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ### Creating Spark Session 
 
 # COMMAND ----------
@@ -78,12 +83,40 @@ profile_report.to_notebook_iframe()
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ### Based on the above profile report Removing the records that does have phone 
+
+# COMMAND ----------
+
 from pyspark.sql.functions import col
 # Remove rows where the 'phone' column is null or empty
 cleaned_customer_df = cust_df.filter(
     (col("phone").isNotNull()) & (col("phone") != "")
 )
 display(cleaned_customer_df)
+
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Based on the above profile report Replacing the null and empty cells of each column with appropriate value
+
+# COMMAND ----------
+
+from pyspark.sql.functions import when, col
+
+# Replace null and empty values for email and state columns
+final_df = cleaned_customer_df.withColumn(
+    "email", 
+    when(col("email").isNull() | (col("email") == ""), "no email").otherwise(col("email"))
+).withColumn(
+    "state", 
+    when(col("state").isNull() | (col("state") == ""), "state not mentioned").otherwise(col("state"))
+)
+
+# Show the result
+display(final_df)
+
 
 
 # COMMAND ----------
