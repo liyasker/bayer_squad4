@@ -23,7 +23,7 @@ spark = SparkSession.builder.appName("cust_order").getOrCreate()
 #For SAS Config
 
 sas_token = "sp=r&st=2024-10-24T12:27:53Z&se=2024-10-24T20:27:53Z&spr=https&sv=2022-11-02&sr=c&sig=kP2iqIoNgx%2Bb3pEjfnD25Ty4viHBAIu4CAjiJ8Wwoig%3D"
-dbutils.secrets.get(scope="",key="") 
+dbutils.secrets.get(scope="",key="") # Due to limited access not able to not able to add
 spark.conf.set("fs.azure.account.auth.type.bayerstorage.dfs.core.windows.net", "SAS")
 spark.conf.set("fs.azure.sas.token.provider.type.bayerstorage.dfs.core.windows.net", 
                "org.apache.hadoop.fs.azurebfs.sas.SASTokenProvider")
@@ -282,6 +282,11 @@ display(final_scd2_df)
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ###Moving to Gold Layer
+
+# COMMAND ----------
+
 # Write final SCD2 data back to Delta Table (or a new location)
-scd2_delta_path = "abfss://bayerstorage@bayershackadls.dfs.core.windows.net/delta/customer_scd2"
-final_scd2_df.write.format("csv").mode("overwrite").save(scd2_delta_path)
+gold_delta_path = "abfss://bayerstorage@bayershackadls.dfs.core.windows.net/delta/customer_scd2"
+final_scd2_df.write.format("csv").mode("overwrite").save(gold_delta_path)
