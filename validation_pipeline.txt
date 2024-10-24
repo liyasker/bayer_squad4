@@ -1,0 +1,61 @@
+{
+    "name": "squad4_file_validation_liyasker",
+    "properties": {
+        "activities": [
+            {
+                "name": "allow_only_csv",
+                "type": "Filter",
+                "dependsOn": [
+                    {
+                        "activity": "get_file_list",
+                        "dependencyConditions": [
+                            "Completed"
+                        ]
+                    }
+                ],
+                "userProperties": [],
+                "typeProperties": {
+                    "items": {
+                        "value": "@activity('get_file_list').output.childItems",
+                        "type": "Expression"
+                    },
+                    "condition": {
+                        "value": "@endswith(item().name, '.csv')",
+                        "type": "Expression"
+                    }
+                }
+            },
+            {
+                "name": "get_file_list",
+                "type": "GetMetadata",
+                "dependsOn": [],
+                "policy": {
+                    "timeout": "0.12:00:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "dataset": {
+                        "referenceName": "squad4_adls_dstn_ds_liyasker",
+                        "type": "DatasetReference"
+                    },
+                    "fieldList": [
+                        "childItems",
+                        "exists"
+                    ],
+                    "storeSettings": {
+                        "type": "AzureBlobFSReadSettings",
+                        "enablePartitionDiscovery": false
+                    },
+                    "formatSettings": {
+                        "type": "DelimitedTextReadSettings"
+                    }
+                }
+            }
+        ],
+        "annotations": []
+    }
+}
