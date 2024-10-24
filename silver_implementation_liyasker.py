@@ -133,10 +133,43 @@ display(order_df)
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ### Joining order and customer based on filtered customer record
+# MAGIC ### Considering one to many relationship between customer and order, One customer can place multiple orders Joining order and customer based on filtered customer record
 
 # COMMAND ----------
 
+valid_orders_df = order_df.join(
+    final_cust_df,                # Join with the customer DataFrame
+    order_df.customer_id == final_cust_df["customer_id"],  # Join condition based on customer ID
+    "inner"                     # Use an inner join to keep only matching rows
+)
+
+display(valid_orders_df)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Reading Order_line and creating dataset 
+
+# COMMAND ----------
+
+adls_path_order_line = "dbfs:/mnt/landing_zone/order_line.csv"
+order_line_df = spark.read.format("csv").option("header", "true").load(adls_path_order_line)
+display(order_line_df)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Considering one to many relationship between order_line and order, One order can have multiple orders multiple orders or products
+
+# COMMAND ----------
+
+valid_orders_df = valid_orders_df.join(
+    order_line_df,               
+    valid_orders_df.order_id == order_line_df["order_id"],  
+    "inner"                    
+)
+
+display(valid_orders_df)
 
 
 # COMMAND ----------
@@ -205,9 +238,9 @@ changed_customers_df = cust_df_scd2.join(
     cust_df_scd2["customer_id"] == customer2_df["customer_id"], 
     "inner"
 ).filter(
-    (cust_df_scd2["Address"] != customer2_df["Address"]) |
-    (cust_df_scd2["address_line_2"] != customer2_df["address_line_2"]) |
-    (cust_df_scd2["phone"] != customer2_df["phone"])
+    (customer2_df["Address"] != customer2_df["Address"]) |
+    (customer2_df["address_line_2"] != customer2_df["address_line_2"]) |
+    (customer2_df["phone"] != customer2_df["phone"])
 ).select(cust_df_scd2["customer_id"])
 
 # Step 2: Update the old records with the 'end_date' and set 'is_active' to 0
@@ -224,6 +257,76 @@ updated_scd2_df = cust_df_scd2.join(
 # Step 3: Insert the new records for the customers that have changed (with updated address)
 # The new records should have start_date as the current date and is_active as 1
 new_customer_scd2_df = customer2_df.join(
+    updated_scd2_df, 
+    on="customer_id", 
+    how="left_anti"
+)
+
+# Combine the updated SCD2 table and the new records
+final_scd2_df = updated_scd2_df.unionByName(new_customer_scd2_df)
+
+display(final_scd2_df)
+
+# # Write final SCD2 data back to Delta Table (or a new location)
+# scd2_delta_path = "abfss://<container-name>@<storage-account-name>.dfs.core.windows.net/delta/customer_scd2"
+# final_scd2_df.write.format("delta").mode("overwrite").save(scd2_delta_path)
+
+# COMMAND ----------
+
+from pyspark.sql import functions as F
+from pyspark.sql.window import Window
+
+# Sample SCD2 customer table structure (initial loading)
+customer_scd2_schema = [
+    "customer_id", "first_name", "last_name", "email", "phone", "Address", 
+    "address_line_2", "start_date", "end_date", "is_active"
+]
+
+# Assuming the current SCD2 table is loaded into a DataFrame called customer_scd2_df
+# customer_scd2_df = spark.read.csv(existing_scd2_table_path)
+
+# Set 'end_date' to null for active records and a past date for inactive records
+scd2_active_condition = F.col("is_active") == 1
+window_spec = Window.partitionBy("customer_id").orderBy(F.col("start_date").desc())
+
+# Set current date for new records
+current_date = F.current_date()
+
+# Add 'start_date' for the new data (changes in customer2_df)
+customer2_df = customer2_df.withColumn("start_date", current_date) \
+                           .withColumn("is_active", F.lit(1)) \
+                           .withColumn("end_date", F.lit(None).cast("date"))
+
+# Alias the DataFrames
+cust_df_scd2_alias = cust_df_scd2.alias("cust_df_scd2")
+customer2_df_alias = customer2_df.alias("customer2_df")
+
+# Step 1: Deactivate records in the current SCD2 table that are now changed
+# Join on customer_id and look for changes in the address or phone details
+changed_customers_df = cust_df_scd2_alias.join(
+    customer2_df_alias, 
+    cust_df_scd2_alias["customer_id"] == customer2_df_alias["customer_id"], 
+    "inner"
+).filter(
+    (cust_df_scd2_alias["Address"] != customer2_df_alias["Address"]) |
+    (cust_df_scd2_alias["address_line_2"] != customer2_df_alias["address_line_2"]) |
+    (cust_df_scd2_alias["phone"] != customer2_df_alias["phone"])
+).select(cust_df_scd2_alias["customer_id"])
+
+# Step 2: Update the old records with the 'end_date' and set 'is_active' to 0
+updated_scd2_df = cust_df_scd2_alias.join(
+    changed_customers_df, 
+    on="customer_id", 
+    how="left_semi"
+).withColumn(
+    "end_date", current_date
+).withColumn(
+    "is_active", F.lit(0)
+)
+
+# Step 3: Insert the new records for the customers that have changed (with updated address)
+# The new records should have start_date as the current date and is_active as 1
+new_customer_scd2_df = customer2_df_alias.join(
     updated_scd2_df, 
     on="customer_id", 
     how="left_anti"
